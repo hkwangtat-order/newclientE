@@ -62,15 +62,17 @@
         .freq-divider { text-align: center; margin: 20px 0; font-size: 0.85rem; color: #aaa; position: relative; }
         .freq-divider:before { content: ""; position: absolute; top: 50%; left: 15%; width: 25%; height: 1px; background: #ddd; }
         .freq-divider:after { content: ""; position: absolute; top: 50%; right: 15%; width: 25%; height: 1px; background: #ddd; }
+        
         .setup-input-group { margin-bottom: 15px; text-align: left; }
         .setup-label { font-weight: bold; margin-bottom: 5px; display: block; color: #333; }
         .setup-input { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; }
         .setup-input:focus { border-color: #ffc107; outline: none; }
         .btn-setup-save { width: 100%; background-color: #ffc107; color: black; font-weight: bold; padding: 12px; border: none; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; }
         
-        /* New: Clear Button Style */
-        .btn-clear-history { display: block; margin: 30px auto; padding: 8px 20px; border: 1px solid #ccc; background: white; color: #666; border-radius: 50px; font-size: 0.9rem; transition: all 0.2s; }
-        .btn-clear-history:hover { background: #f8f9fa; color: #333; border-color: #999; }
+        /* Clear Button Style */
+        .btn-clear-history { display: inline-block; margin: 30px auto; padding: 10px 25px; border: 1px solid #ccc; background: white; color: #666; border-radius: 50px; font-size: 0.9rem; transition: all 0.2s; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .btn-clear-history:hover { background: #f8f9fa; color: #d32f2f; border-color: #d32f2f; }
+        .btn-clear-history i { margin-right: 5px; }
     </style>
 </head>
 <body>
@@ -100,6 +102,7 @@
         您的常用清單目前是空的。<br>
         請到「全部產品」頁面選購，<br>系統會自動記憶您的選擇！
     </div>
+    <div id="frequentListContent"></div>
 </div>
 <div id="tab-all" class="tab-content"></div>
 
@@ -167,12 +170,14 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // V9.1 Universal Generic Template (With Reset Feature)
+    // V9.2 Universal Generic Template (With Working Reset & Popup Fix)
     let customerName = ""; 
     let customerCode = "";
     const salesPhone = "85263778262"; 
-    const storageKey = "generic_user_v9"; 
-    const profileKey = "generic_profile_v9"; 
+    
+    // UPDATED KEYS: Using _v9_2 to force new popup for testing
+    const storageKey = "generic_user_v9_2"; 
+    const profileKey = "generic_profile_v9_2"; 
 
     let frequentCodes = []; 
     let learnedFrequent = []; 
@@ -210,75 +215,121 @@
         { cat: "漬物", items: ["壽司紅薑 (C27)", "壽司白薑 (C27A)", "牛蒡醬油漬 (C31B)", "薑芽(30本) (C27B)", "海葡萄100g (D81A)", "青雞冠草 (C09)", "泡菜（400g） (C87B)", "大L蘿白 (C31)", "味噌蒜頭漬 (C31C)", "紅雞冠草 (C09A)", "味付筍 (C31D)", "青海草 (C10AA)"] },
         { cat: "伴碟/乾貨/工具", items: ["軍艦紫菜50片 (C18A)", "壽司紫菜50片 (C18C)", "神戶切絲紫菜 (C18E)", "單翼手捲海苔 (C18F)", "日出昆布 (C57)", "碎海草 (C10A)", "海苔粉 (C18G)", "紫菜杯 (C18J)", "日高昆布 (C57A)", "山形膠葉 (C01B)", "櫻花蝦乾500g (C03)", "櫻花蝦乾90g (C03A)", "醫用丁晴手套 S (C50BA)", "醫用丁晴手套 M (C50BB)", "醫用丁晴手套 L (C50BC)", "保鮮綿紙M (C70)", "914保鮮紙 (C914SC)", "912保鮮紙 (C912SC)", "910保鮮紙 (C910SC)", "613錫紙 (C613)", "3寸木皮船 (C04C)", "手套S (C50AA)", "手套M (C50AB)", "天婦羅紙 (C43A)", "木盒 (C07)", "細木盒 (C07A)", "日本JFDA消毒酒精 (C50D)"] }
     ];
-    let productMap = {}, cart = {}, cartUnits = {}, cartModal = null, unitModal = null, pendingProductCode = null;
+    let productMap = {}, cart = {}, cartUnits = {}, cartModal = null, unitModal = null, pendingProductCode = null, setupModal = null;
     function init() {
         productMap = {}; 
         fullCatalog.forEach(c=>{c.items.forEach(i=>{const m=i.match(/^(.*)\s*\(([A-Za-z0-9]+)\)$/);if(m)productMap[m[2]]={fullName:i,name:m[1],code:m[2]}})});
         
+        // Generic: Load Profile
+        customerName = localStorage.getItem(profileKey + "_name") || "";
+        customerCode = localStorage.getItem(profileKey + "_code") || "";
+        
+        // Update UI
+        updateClientInfoUI();
+
+        // Load Learned Items
         const savedFreq = localStorage.getItem(storageKey + '_learned');
         if(savedFreq) {
-            try { 
-                learnedFrequent = JSON.parse(savedFreq); 
-            } catch(e) {}
+            try { learnedFrequent = JSON.parse(savedFreq); } catch(e) {}
         }
 
         loadCart(); renderFrequent(); renderAll();
-        cartModal=new bootstrap.Modal(document.getElementById('cartModal')); unitModal=new bootstrap.Modal(document.getElementById('unitSelectionModal'));
+        
+        cartModal=new bootstrap.Modal(document.getElementById('cartModal')); 
+        unitModal=new bootstrap.Modal(document.getElementById('unitSelectionModal'));
+        setupModal=new bootstrap.Modal(document.getElementById('setupModal'));
+
+        // If no profile, show setup modal
+        if(!customerName || !customerCode){
+            openSetupModal(false);
+        }
+    }
+    
+    function openSetupModal(allowClose = true) {
+        document.getElementById('inputClientName').value = customerName;
+        document.getElementById('inputClientCode').value = customerCode;
+        const closeBtn = document.getElementById('setupCloseBtn');
+        if(allowClose) closeBtn.style.display = 'block';
+        else closeBtn.style.display = 'none';
+        setupModal.show();
+    }
+
+    function saveClientDetails() {
+        const name = document.getElementById('inputClientName').value.trim();
+        const code = document.getElementById('inputClientCode').value.trim();
+        if(!name || !code) { alert("請輸入完整的名稱和編號！"); return; }
+        
+        customerName = name;
+        customerCode = code;
+        localStorage.setItem(profileKey + "_name", customerName);
+        localStorage.setItem(profileKey + "_code", customerCode);
+        
+        updateClientInfoUI();
+        setupModal.hide();
+    }
+
+    function updateClientInfoUI() {
+        if(customerName) document.getElementById('displayClientName').innerHTML = customerName + ' <i class="bi bi-pencil-square" style="font-size:0.8em"></i>';
+        if(customerCode) document.getElementById('displayClientCode').innerText = customerCode;
     }
     
     function getDeliveryDate() {
         const now = new Date();
         const hour = now.getHours();
         let targetDate = new Date(now);
-        
-        if (hour >= 11) {
-            targetDate.setDate(targetDate.getDate() + 1);
-        }
-        
+        if (hour >= 11) targetDate.setDate(targetDate.getDate() + 1);
         const y = targetDate.getFullYear();
         const m = String(targetDate.getMonth() + 1).padStart(2, '0');
         const d = String(targetDate.getDate()).padStart(2, '0');
-        const weekdays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
-        const w = weekdays[targetDate.getDay()];
-        
+        const w = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"][targetDate.getDay()];
         return `${y}-${m}-${d} (${w})`;
     }
 
     function loadCart() {
-        const c=localStorage.getItem('orderCart_'+customerCode), u=localStorage.getItem('orderUnits_'+customerCode);
+        const c=localStorage.getItem('orderCart_'+storageKey), u=localStorage.getItem('orderUnits_'+storageKey);
         if(c)try{cart=JSON.parse(c)}catch(e){} if(u)try{cartUnits=JSON.parse(u)}catch(e){}
         calcTotal();
     }
     function saveCart() {
-        localStorage.setItem('orderCart_'+customerCode, JSON.stringify(cart));
-        localStorage.setItem('orderUnits_'+customerCode, JSON.stringify(cartUnits));
+        localStorage.setItem('orderCart_'+storageKey, JSON.stringify(cart));
+        localStorage.setItem('orderUnits_'+storageKey, JSON.stringify(cartUnits));
     }
     function switchTab(t){document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.nav-link').forEach(e=>e.classList.remove('active'));document.getElementById('tab-'+t).classList.add('active');event.target.classList.add('active');if(t==='all'){clearSearch();document.getElementById('searchBar').style.display='block';window.scrollTo(0,0)}else{document.getElementById('searchBar').style.display='none'}}
     
     function renderFrequent(){
-        const c=document.getElementById('tab-frequent');
+        const c=document.getElementById('frequentListContent');
+        const emptyMsg = document.getElementById('emptyFrequentMsg');
         let h='';
         
-        frequentCodes.forEach(code=>{
-            const p=productMap[code];
-            if(p) { // Filter unknown
-                h+=createProductRow(p.fullName);
-            }
-        });
-        
         if (learnedFrequent.length > 0) {
-            let uniqueLearned = learnedFrequent.filter(code => !frequentCodes.includes(code)); 
-            if (uniqueLearned.length > 0) {
-                h += `<div class="freq-divider">👇 最近新增產品 👇</div>`;
-                uniqueLearned.forEach(code=>{
-                    const p=productMap[code];
-                    if(p) { 
-                        h+=createProductRow(p.fullName);
-                    }
-                });
-            }
+            emptyMsg.style.display = 'none';
+            // Sort learned items
+            let sortedLearned = [...learnedFrequent].sort();
+            sortedLearned.forEach(code=>{
+                const p=productMap[code];
+                if(p) { 
+                    h+=createProductRow(p.fullName);
+                }
+            });
+            // ✅ ADD CLEAR BUTTON HERE
+            h += `<div style="text-align:center; margin: 40px 0 20px 0;">
+                    <button class="btn-clear-history" onclick="resetFrequentList()">
+                        <i class="bi bi-trash3"></i> 重置常用清單
+                    </button>
+                  </div>`;
+        } else {
+            emptyMsg.style.display = 'block';
         }
-        c.innerHTML=h;
+        
+        c.innerHTML = h;
+    }
+
+    function resetFrequentList() {
+        if(confirm("確定要重置常用清單嗎？\n這將清空所有自動記憶的產品。")) {
+            learnedFrequent = [];
+            localStorage.removeItem(storageKey + '_learned');
+            renderFrequent();
+        }
     }
     
     function renderAll(f=''){const c=document.getElementById('tab-all');let h='';const t=f.toUpperCase().split('');fullCatalog.forEach(cat=>{const items=cat.items.filter(i=>{if(!f)return true;const u=i.toUpperCase();return t.every(x=>u.includes(x))});if(items.length>0){if(!f)h+=`<div class="cat-header">${cat.cat}</div>`;items.forEach(i=>h+=createProductRow(i))}});if(h==='')h='<div class="text-center p-5 text-muted">找不到相關產品</div>';c.innerHTML=h}
@@ -351,7 +402,7 @@
         calcTotal(); saveCart(); if(document.getElementById('cartModal').classList.contains('show'))renderCartModalItems();
     }
     
-    function clearCart(){if(Object.keys(cart).length===0)return;if(confirm("確定要清空所有已選貨品嗎？")){cart={};cartUnits={};localStorage.removeItem('orderCart_'+customerCode);localStorage.removeItem('orderUnits_'+customerCode);renderFrequent();renderAll();calcTotal();renderCartModalItems()}}
+    function clearCart(){if(Object.keys(cart).length===0)return;if(confirm("確定要清空所有已選貨品嗎？")){cart={};cartUnits={};localStorage.removeItem('orderCart_'+storageKey);localStorage.removeItem('orderUnits_'+storageKey);renderFrequent();renderAll();calcTotal();renderCartModalItems()}}
     
     function calcTotal(){
         const count=Object.keys(cart).length; document.getElementById('totalQty').innerText=count;
@@ -367,6 +418,7 @@
     
     // V9.0 Sorted Send Logic
     function sendWhatsApp(mode){
+        if(!customerName || !customerCode) { alert("請先設定客戶資料！"); openSetupModal(); return; }
         if(Object.keys(cart).length===0){alert("請先選擇產品！");return}
         
         const dateStr = getDeliveryDate();
@@ -377,7 +429,7 @@
         
         let hasNewItems = false;
         for(let c of codes){
-            if(!frequentCodes.includes(c) && !learnedFrequent.includes(c)){
+            if(!learnedFrequent.includes(c)){
                 learnedFrequent.push(c);
                 hasNewItems = true;
             }
