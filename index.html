@@ -82,7 +82,7 @@
             <div class="client-name" id="displayClientName">請設定客戶名稱 <i class="bi bi-pencil-square" style="font-size:0.8em"></i></div>
             <div style="font-size: 0.8rem; color: #ccc;" id="displayClientCode">點擊此處設定</div>
         </div>
-        <div style="text-align: right; font-size: 0.8rem; color: #ccc;">宏達批發<br>Tel: 63778262</div>
+        <div style="text-align: right; font-size: 0.8rem; color: #ccc;">宏達批發<br>Tel: 63771688</div>
     </div>
     <ul class="nav nav-tabs">
         <li class="nav-item" style="flex:1; text-align:center;"><button class="nav-link active" style="width:100%" onclick="switchTab('frequent')">🌟 常用清單</button></li>
@@ -170,17 +170,17 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // V9.2 Universal Generic Template (With Working Reset & Popup Fix)
+    // V9.3 Universal Generic Template (Frequency Sorting Enabled)
     let customerName = ""; 
     let customerCode = "";
-    const salesPhone = "85263778262"; 
+    const salesPhone = "85263771688"; 
     
-    // UPDATED KEYS: Using _v9_2 to force new popup for testing
-    const storageKey = "generic_user_v9_2"; 
-    const profileKey = "generic_profile_v9_2"; 
+    // UPDATED KEYS: Using _v9_3 to force new popup & clear old data for testing
+    const storageKey = "generic_user_v9_3"; 
+    const profileKey = "generic_profile_v9_3"; 
 
-    let frequentCodes = []; 
-    let learnedFrequent = []; 
+    // ITEM COUNTS (Frequency Map) -> Stores { "A01": 5, "B02": 2 }
+    let itemCounts = {}; 
 
     const outOfStockCodes = ["C58AC","D58C","D10F","D10D","D09M","D09G"];
     const eelProducts = ["D22J", "D22L", "D22", "D22C", "D22A", "D22D", "D22I", "D22G"];
@@ -220,17 +220,16 @@
         productMap = {}; 
         fullCatalog.forEach(c=>{c.items.forEach(i=>{const m=i.match(/^(.*)\s*\(([A-Za-z0-9]+)\)$/);if(m)productMap[m[2]]={fullName:i,name:m[1],code:m[2]}})});
         
-        // Generic: Load Profile
+        // V9.3 New Keys for Frequency Tracking
         customerName = localStorage.getItem(profileKey + "_name") || "";
         customerCode = localStorage.getItem(profileKey + "_code") || "";
         
-        // Update UI
         updateClientInfoUI();
 
-        // Load Learned Items
-        const savedFreq = localStorage.getItem(storageKey + '_learned');
-        if(savedFreq) {
-            try { learnedFrequent = JSON.parse(savedFreq); } catch(e) {}
+        // Load Frequency Map (Item Counts)
+        const savedStats = localStorage.getItem(storageKey + '_stats');
+        if(savedStats) {
+            try { itemCounts = JSON.parse(savedStats); } catch(e) {}
         }
 
         loadCart(); renderFrequent(); renderAll();
@@ -239,7 +238,6 @@
         unitModal=new bootstrap.Modal(document.getElementById('unitSelectionModal'));
         setupModal=new bootstrap.Modal(document.getElementById('setupModal'));
 
-        // If no profile, show setup modal
         if(!customerName || !customerCode){
             openSetupModal(false);
         }
@@ -301,17 +299,23 @@
         const emptyMsg = document.getElementById('emptyFrequentMsg');
         let h='';
         
-        if (learnedFrequent.length > 0) {
+        // V9.3 Frequency Sorting Logic
+        let sortedKeys = Object.keys(itemCounts).sort((a,b) => {
+            // Sort by count descending
+            let countDiff = itemCounts[b] - itemCounts[a];
+            if (countDiff !== 0) return countDiff;
+            // If counts equal, sort by code A-Z
+            return a.localeCompare(b);
+        });
+
+        if (sortedKeys.length > 0) {
             emptyMsg.style.display = 'none';
-            // Sort learned items
-            let sortedLearned = [...learnedFrequent].sort();
-            sortedLearned.forEach(code=>{
+            sortedKeys.forEach(code=>{
                 const p=productMap[code];
                 if(p) { 
                     h+=createProductRow(p.fullName);
                 }
             });
-            // ✅ ADD CLEAR BUTTON HERE
             h += `<div style="text-align:center; margin: 40px 0 20px 0;">
                     <button class="btn-clear-history" onclick="resetFrequentList()">
                         <i class="bi bi-trash3"></i> 重置常用清單
@@ -326,8 +330,8 @@
 
     function resetFrequentList() {
         if(confirm("確定要重置常用清單嗎？\n這將清空所有自動記憶的產品。")) {
-            learnedFrequent = [];
-            localStorage.removeItem(storageKey + '_learned');
+            itemCounts = {};
+            localStorage.removeItem(storageKey + '_stats');
             renderFrequent();
         }
     }
@@ -416,7 +420,7 @@
         let h=''; for(let k in cart){const p=productMap[k];h+=createProductRow(p?p.fullName:`${k} (未知)`);} c.innerHTML=h;
     }
     
-    // V9.0 Sorted Send Logic
+    // V9.3 Sorted Send Logic + Frequency Counting
     function sendWhatsApp(mode){
         if(!customerName || !customerCode) { alert("請先設定客戶資料！"); openSetupModal(); return; }
         if(Object.keys(cart).length===0){alert("請先選擇產品！");return}
@@ -425,19 +429,25 @@
         let msg=`${customerCode} ${customerName}\n日期：${dateStr}\n訂貨單：\n\n`;
         const fmt=c=>{const p=productMap[c];const n=p?p.name:c;let q=cart[c].toString();if(cartUnits[c]==='kg')q+='K';return ` ${q.padEnd(5,' ')} ${n} (${c})\n`};
         
+        // 1. WhatsApp Output: Alphabetical Sort
         let codes = Object.keys(cart).sort(); 
         
         let hasNewItems = false;
         for(let c of codes){
-            if(!learnedFrequent.includes(c)){
-                learnedFrequent.push(c);
-                hasNewItems = true;
+            msg+=fmt(c);
+            
+            // 2. Frequency Tracking Logic
+            if(itemCounts[c]) {
+                itemCounts[c]++;
+            } else {
+                itemCounts[c] = 1;
             }
-            msg+=fmt(c); 
+            hasNewItems = true;
         }
         
+        // Save frequency stats
         if(hasNewItems){
-            localStorage.setItem(storageKey + '_learned', JSON.stringify(learnedFrequent));
+            localStorage.setItem(storageKey + '_stats', JSON.stringify(itemCounts));
             renderFrequent(); 
         }
 
