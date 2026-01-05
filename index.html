@@ -453,14 +453,31 @@
         let h=''; for(let k in cart){const p=productMap[k];h+=createProductRow(p?p.fullName:`${k} (未知)`);} c.innerHTML=h;
     }
     
-    // V9.5 Final Logic: Send + Learn + Sort + Save Stats
+   // V9.6 Sorted Send Logic (顯示 K 和 隻)
     function sendWhatsApp(mode){
         if(!customerName || !customerCode) { alert("請先設定客戶資料！"); openSetupModal(); return; }
         if(Object.keys(cart).length===0){alert("請先選擇產品！");return}
         
         const dateStr = getDeliveryDate();
         let msg=`${customerCode} ${customerName}\n日期：${dateStr}\n訂貨單：\n\n`;
-        const fmt=c=>{const p=productMap[c];const n=p?p.name:c;let q=cart[c].toString();if(cartUnits[c]==='kg')q+='K';return ` ${q.padEnd(5,' ')} ${n} (${c})\n`};
+        
+        // 👇 這裡就是修改了顯示單位的地方 👇
+        const fmt=c=>{
+            const p=productMap[c];
+            const n=p?p.name:c;
+            let q=cart[c].toString();
+            
+            // 如果單位是 kg，加 'K'
+            if(cartUnits[c]==='kg') {
+                q += 'K';
+            } 
+            // 如果單位是 piece (右邊按鈕)，加 '隻'
+            else if (cartUnits[c]==='piece') {
+                q += '隻';
+            }
+            
+            return ` ${q.padEnd(6,' ')} ${n} (${c})\n`
+        };
         
         // WhatsApp Sort: A-Z
         let codes = Object.keys(cart).sort(); 
@@ -496,4 +513,5 @@
 </script>
 </body>
 </html>
+
 
