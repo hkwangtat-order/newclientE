@@ -9,7 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
-        body { font-family: "Microsoft JhengHei", sans-serif; background-color: #f8f9fa; padding-bottom: 140px; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background-color: #f8f9fa; padding-bottom: 160px; }
         .sticky-header-container { position: sticky; top: 0; z-index: 1020; background-color: #212529; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
         .top-info { padding: 12px 15px 5px 15px; color: white; display: flex; justify-content: space-between; align-items: center; }
         .client-name { font-size: 1.3rem; font-weight: 800; color: #ffc107; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
@@ -69,10 +69,13 @@
         .setup-input:focus { border-color: #ffc107; outline: none; }
         .btn-setup-save { width: 100%; background-color: #ffc107; color: black; font-weight: bold; padding: 12px; border: none; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; }
         
-        /* Clear Button Style */
-        .btn-clear-history { display: inline-block; margin: 30px auto; padding: 10px 25px; border: 1px solid #ccc; background: white; color: #666; border-radius: 50px; font-size: 0.9rem; transition: all 0.2s; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .btn-clear-history:hover { background: #f8f9fa; color: #d32f2f; border-color: #d32f2f; }
-        .btn-clear-history i { margin-right: 5px; }
+        /* Reset Buttons Style */
+        .admin-controls { text-align: center; margin: 40px 0 20px 0; padding-top: 20px; border-top: 1px dashed #ddd; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        .btn-reset { padding: 8px 20px; border-radius: 50px; font-size: 0.9rem; transition: all 0.2s; cursor: pointer; border: 1px solid; background: white; width: fit-content; }
+        .btn-reset-freq { color: #6c757d; border-color: #ced4da; }
+        .btn-reset-freq:hover { background: #f8f9fa; color: #495057; border-color: #adb5bd; }
+        .btn-logout { color: #d32f2f; border-color: #f5c6cb; }
+        .btn-logout:hover { background: #fff5f5; color: #a50e0e; border-color: #d32f2f; }
     </style>
 </head>
 <body>
@@ -82,7 +85,7 @@
             <div class="client-name" id="displayClientName">請設定客戶名稱 <i class="bi bi-pencil-square" style="font-size:0.8em"></i></div>
             <div style="font-size: 0.8rem; color: #ccc;" id="displayClientCode">點擊此處設定</div>
         </div>
-        <div style="text-align: right; font-size: 0.8rem; color: #ccc;">宏達批發<br>Tel: 63771688</div>
+        <div style="text-align: right; font-size: 0.8rem; color: #ccc;">宏達批發<br>Tel: <span id="displayPhone"></span></div>
     </div>
     <ul class="nav nav-tabs">
         <li class="nav-item" style="flex:1; text-align:center;"><button class="nav-link active" style="width:100%" onclick="switchTab('frequent')">🌟 常用清單</button></li>
@@ -103,6 +106,14 @@
         請到「全部產品」頁面選購，<br>系統會自動記憶您的選擇！
     </div>
     <div id="frequentListContent"></div>
+    <div class="admin-controls" id="adminControls">
+        <button class="btn-reset btn-reset-freq" onclick="resetFrequentList()" id="btnResetFreq" style="display:none;">
+            <i class="bi bi-arrow-counterclockwise"></i> 重置常用清單
+        </button>
+        <button class="btn-reset btn-logout" onclick="logoutUser()">
+            <i class="bi bi-box-arrow-right"></i> 登出 / 重置身份
+        </button>
+    </div>
 </div>
 <div id="tab-all" class="tab-content"></div>
 
@@ -170,17 +181,23 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // V9.3 Universal Generic Template (Frequency Sorting Enabled)
+    // ==========================================
+    // 🔽 只需修改這裡的電話，不同銷售的資料就會自動分開 🔽
+    // ==========================================
+    const salesPhone = "63771688"; 
+    // ==========================================
+
+    // V9.5 Universal Generic Template (Independent Keys + Logout + Frequency)
     let customerName = ""; 
     let customerCode = "";
-    const salesPhone = "85263771688"; 
     
-    // UPDATED KEYS: Using _v9_3 to force new popup & clear old data for testing
-    const storageKey = "generic_user_v9_3"; 
-    const profileKey = "generic_profile_v9_3"; 
+    // Unique storage keys per Sales Phone Number
+    const storageKey = "gen_user_" + salesPhone; 
+    const profileKey = "gen_profile_" + salesPhone; 
 
-    // ITEM COUNTS (Frequency Map) -> Stores { "A01": 5, "B02": 2 }
+    // ITEM COUNTS (Frequency Map)
     let itemCounts = {}; 
+    let learnedFrequent = []; 
 
     const outOfStockCodes = ["C58AC","D58C","D10F","D10D","D09M","D09G"];
     const eelProducts = ["D22J", "D22L", "D22", "D22C", "D22A", "D22D", "D22I", "D22G"];
@@ -220,17 +237,17 @@
         productMap = {}; 
         fullCatalog.forEach(c=>{c.items.forEach(i=>{const m=i.match(/^(.*)\s*\(([A-Za-z0-9]+)\)$/);if(m)productMap[m[2]]={fullName:i,name:m[1],code:m[2]}})});
         
-        // V9.3 New Keys for Frequency Tracking
+        document.getElementById('displayPhone').innerText = salesPhone;
+
         customerName = localStorage.getItem(profileKey + "_name") || "";
         customerCode = localStorage.getItem(profileKey + "_code") || "";
-        
         updateClientInfoUI();
 
-        // Load Frequency Map (Item Counts)
         const savedStats = localStorage.getItem(storageKey + '_stats');
-        if(savedStats) {
-            try { itemCounts = JSON.parse(savedStats); } catch(e) {}
-        }
+        if(savedStats) { try { itemCounts = JSON.parse(savedStats); } catch(e) {} }
+
+        // Reconstruct learnedFrequent from keys of itemCounts for rendering
+        learnedFrequent = Object.keys(itemCounts);
 
         loadCart(); renderFrequent(); renderAll();
         
@@ -247,8 +264,7 @@
         document.getElementById('inputClientName').value = customerName;
         document.getElementById('inputClientCode').value = customerCode;
         const closeBtn = document.getElementById('setupCloseBtn');
-        if(allowClose) closeBtn.style.display = 'block';
-        else closeBtn.style.display = 'none';
+        closeBtn.style.display = allowClose ? 'block' : 'none';
         setupModal.show();
     }
 
@@ -269,6 +285,30 @@
     function updateClientInfoUI() {
         if(customerName) document.getElementById('displayClientName').innerHTML = customerName + ' <i class="bi bi-pencil-square" style="font-size:0.8em"></i>';
         if(customerCode) document.getElementById('displayClientCode').innerText = customerCode;
+    }
+
+    function logoutUser() {
+        if(confirm("確定要登出並清除此裝置上的客戶資料嗎？\n(常用清單和購物車也會被清空)")) {
+            localStorage.removeItem(profileKey + "_name");
+            localStorage.removeItem(profileKey + "_code");
+            localStorage.removeItem(storageKey + '_stats');
+            localStorage.removeItem('orderCart_'+storageKey);
+            localStorage.removeItem('orderUnits_'+storageKey);
+            
+            customerName = "";
+            customerCode = "";
+            itemCounts = {};
+            learnedFrequent = [];
+            cart = {};
+            cartUnits = {};
+            
+            updateClientInfoUI();
+            renderFrequent();
+            renderAll();
+            calcTotal();
+            
+            openSetupModal(false);
+        }
     }
     
     function getDeliveryDate() {
@@ -297,40 +337,33 @@
     function renderFrequent(){
         const c=document.getElementById('frequentListContent');
         const emptyMsg = document.getElementById('emptyFrequentMsg');
+        const resetBtn = document.getElementById('btnResetFreq');
         let h='';
         
-        // V9.3 Frequency Sorting Logic
+        // Sort by frequency (high to low), then alphabetical
         let sortedKeys = Object.keys(itemCounts).sort((a,b) => {
-            // Sort by count descending
-            let countDiff = itemCounts[b] - itemCounts[a];
-            if (countDiff !== 0) return countDiff;
-            // If counts equal, sort by code A-Z
-            return a.localeCompare(b);
+            let diff = itemCounts[b] - itemCounts[a];
+            return diff !== 0 ? diff : a.localeCompare(b);
         });
 
         if (sortedKeys.length > 0) {
             emptyMsg.style.display = 'none';
+            resetBtn.style.display = 'inline-block'; // Show reset button
             sortedKeys.forEach(code=>{
                 const p=productMap[code];
-                if(p) { 
-                    h+=createProductRow(p.fullName);
-                }
+                if(p) h+=createProductRow(p.fullName);
             });
-            h += `<div style="text-align:center; margin: 40px 0 20px 0;">
-                    <button class="btn-clear-history" onclick="resetFrequentList()">
-                        <i class="bi bi-trash3"></i> 重置常用清單
-                    </button>
-                  </div>`;
         } else {
             emptyMsg.style.display = 'block';
+            resetBtn.style.display = 'none'; // Hide reset button
         }
-        
         c.innerHTML = h;
     }
 
     function resetFrequentList() {
         if(confirm("確定要重置常用清單嗎？\n這將清空所有自動記憶的產品。")) {
             itemCounts = {};
+            learnedFrequent = [];
             localStorage.removeItem(storageKey + '_stats');
             renderFrequent();
         }
@@ -420,7 +453,7 @@
         let h=''; for(let k in cart){const p=productMap[k];h+=createProductRow(p?p.fullName:`${k} (未知)`);} c.innerHTML=h;
     }
     
-    // V9.3 Sorted Send Logic + Frequency Counting
+    // V9.5 Final Logic: Send + Learn + Sort + Save Stats
     function sendWhatsApp(mode){
         if(!customerName || !customerCode) { alert("請先設定客戶資料！"); openSetupModal(); return; }
         if(Object.keys(cart).length===0){alert("請先選擇產品！");return}
@@ -429,23 +462,18 @@
         let msg=`${customerCode} ${customerName}\n日期：${dateStr}\n訂貨單：\n\n`;
         const fmt=c=>{const p=productMap[c];const n=p?p.name:c;let q=cart[c].toString();if(cartUnits[c]==='kg')q+='K';return ` ${q.padEnd(5,' ')} ${n} (${c})\n`};
         
-        // 1. WhatsApp Output: Alphabetical Sort
+        // WhatsApp Sort: A-Z
         let codes = Object.keys(cart).sort(); 
         
         let hasNewItems = false;
         for(let c of codes){
             msg+=fmt(c);
-            
-            // 2. Frequency Tracking Logic
-            if(itemCounts[c]) {
-                itemCounts[c]++;
-            } else {
-                itemCounts[c] = 1;
-            }
+            // Frequency Tracking Logic
+            if(itemCounts[c]) itemCounts[c]++;
+            else itemCounts[c] = 1;
             hasNewItems = true;
         }
         
-        // Save frequency stats
         if(hasNewItems){
             localStorage.setItem(storageKey + '_stats', JSON.stringify(itemCounts));
             renderFrequent(); 
