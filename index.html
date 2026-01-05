@@ -315,11 +315,23 @@
         const now = new Date();
         const hour = now.getHours();
         let targetDate = new Date(now);
-        if (hour >= 11) targetDate.setDate(targetDate.getDate() + 1);
+        
+        // 1. 截單邏輯：如果超過 11:00，日期加 1 天
+        if (hour >= 11) {
+            targetDate.setDate(targetDate.getDate() + 1);
+        }
+        
+        // 2. 週日休息邏輯：如果這天是週日 (0)，就自動再加 1 天變成週一
+        if (targetDate.getDay() === 0) {
+            targetDate.setDate(targetDate.getDate() + 1);
+        }
+        
         const y = targetDate.getFullYear();
         const m = String(targetDate.getMonth() + 1).padStart(2, '0');
         const d = String(targetDate.getDate()).padStart(2, '0');
-        const w = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"][targetDate.getDay()];
+        const weekdays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
+        const w = weekdays[targetDate.getDay()];
+        
         return `${y}-${m}-${d} (${w})`;
     }
 
@@ -513,5 +525,6 @@
 </script>
 </body>
 </html>
+
 
 
